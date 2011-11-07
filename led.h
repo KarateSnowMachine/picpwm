@@ -1,4 +1,4 @@
-#define NUM_ROWS 8
+#define NUM_ROWS 2
 #define NUM_COLS 4
 #define NUM_LEDS (NUM_ROWS*NUM_COLS)
 #define LED_RED 0

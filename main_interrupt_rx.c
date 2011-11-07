@@ -1,4 +1,4 @@
-#include <p18f4550.h>
+	#include <p18f4550.h>
 #include "led.h"
 
 
@@ -30,22 +30,13 @@ extern void spi_write(uchar byte);
 
 
 	
-struct led_current_state_t
+typedef struct led_state
 {
 	uchar R;
 	uchar G;
 	uchar B;
-	uchar D; // D is unused in this case? 
-};
-
-typedef struct _led_state_to
-{
-	uchar R:4;
-	uchar G:4;
-	uchar B:4;
-	uchar D:4;
-};
-
+	uchar D; // (D)uration only used in target state
+}led_state_t;
 
 uchar all_cycles = 0;
 uchar pwm_cycle = 0;
@@ -68,25 +59,41 @@ void set_off(uchar type, uchar number)
 
 #define BREG(n) LATBbits.LATB##n
 
-struct led_current_state_t led_colors[NUM_LEDS] = {0};
+led_state_t led_colors[NUM_LEDS] = {0};
+led_state_t led_target_states[NUM_LEDS] = {0};
 
 void refresh_pwm(uchar refresh_row)
 {
-	uchar i,c,duty_cycle,refresh_led;
-	for (c=0; c<LED_NUM_TYPES; c++)
+
+	uchar i,c,refresh_led;
+	led_state_t *led;
+	
+	for (i=0; i<NUM_COLS; i++)
 	{
-		for (i=0; i<NUM_COLS; i++)
-		{
-			refresh_led = refresh_row*NUM_COLS+i;
-			duty_cycle = led_colors[c][refresh_led];
-			if (pwm_cycle >= (NUM_INTENSITY_LEVELS - duty_cycle))
-			{
-				set_on(c, refresh_led); 
-			}
-			else
-			{
-				set_off(c, refresh_led); 
-			}		
+		refresh_led = refresh_row*NUM_COLS+i;
+ 		led = &led_colors[refresh_led];
+		// TODO: This is kludgey :| 
+
+		// Red:	
+		if (pwm_cycle >= (NUM_INTENSITY_LEVELS - led->R)) {
+			set_on(LED_RED, refresh_led); 
+		}
+		else {
+			set_off(LED_RED, refresh_led); 
+		}
+		// Green:	
+		if (pwm_cycle >= (NUM_INTENSITY_LEVELS - led->G)) {
+			set_on(LED_GREEN, refresh_led); 
+		}
+		else {
+			set_off(LED_GREEN, refresh_led); 
+		}
+		// Blue:	
+		if (pwm_cycle >= (NUM_INTENSITY_LEVELS - led->B)) {
+			set_on(LED_BLUE, refresh_led); 
+		}
+		else {
+			set_off(LED_BLUE, refresh_led); 
 		}
 	}
 }
@@ -119,9 +126,9 @@ void draw()
 
 void set_rgb(uchar num, uchar r, uchar g, uchar b)
 {
-	led_colors[LED_RED][num] = r; 
-	led_colors[LED_GREEN][num] = g;
-	led_colors[LED_BLUE][num] = b;
+	led_colors[num].R = r; 
+	led_colors[num].G = g;
+	led_colors[num].B = b;
 }
 
 void main ()
@@ -129,26 +136,25 @@ void main ()
 	uchar duty_cycle,x; 
 	uchar cycles;
 	uchar i;
-	uchar j;
+	unsigned int j=0;
 	init_oscillator();
 	init_io_pins(); 
 
 // TODO: check to make sure that timer is stable before going on 
 	init_timer0();
 
+	while (1)
+	{
 	for (i=0; i<NUM_INTENSITY_LEVELS; i++)
 	{	
 		
-		set_rgb(0,NUM_INTENSITY_LEVELS-1,0,0);
-		set_rgb(1,1,0,0);
+		set_rgb(0,i,i,0);
+		//set_rgb(4,i,NUM_INTENSITY_LEVELS-i-1,0);
+		set_rgb(4,NUM_INTENSITY_LEVELS-1,NUM_INTENSITY_LEVELS-i-1,2);
+		set_rgb(7,i,0,NUM_INTENSITY_LEVELS-i-1);
 
-		set_rgb(2,0,NUM_INTENSITY_LEVELS-1,0);
-		set_rgb(3,0,1,0);		
-
-		set_rgb(4,0,0,NUM_INTENSITY_LEVELS-1);
-		set_rgb(5,0,0,1);
-		set_rgb(6,NUM_INTENSITY_LEVELS-1,NUM_INTENSITY_LEVELS-1,NUM_INTENSITY_LEVELS-1);
-		set_rgb(7,1,1,1);
+		while(j++%4096); 
+	}
 	}
 	while(1); 
 }

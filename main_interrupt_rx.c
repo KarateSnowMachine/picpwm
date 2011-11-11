@@ -35,12 +35,23 @@ typedef struct led_state
 	uchar R;
 	uchar G;
 	uchar B;
-	uchar D; // (D)uration only used in target state
 }led_state_t;
+
+typedef struct led_fade
+{
+	uchar prescaler;
+	uchar prescaler_counter;
+	uchar steps;
+	char dR; 
+	char dG;
+	char dB;
+} led_fade_t;
 
 uchar all_cycles = 0;
 uchar pwm_cycle = 0;
 uchar refresh_row =0 ; 
+
+// This assumes 8 LEDs per column = 8 bits in a uchar, i.e. the bits of each char are the column patterns for a given row in the matrix
 uchar led_status[LED_NUM_TYPES][NUM_ROWS] = {{0}}; 
 
 void set_on(uchar type, uchar number)
@@ -131,30 +142,88 @@ void set_rgb(uchar num, uchar r, uchar g, uchar b)
 	led_colors[num].B = b;
 }
 
+void update_fade(uchar led, led_fade_t *f)
+{
+	if (f->steps == 0)
+	{
+		return;
+	}
+	if (f->prescaler_counter++ == f->prescaler)	{
+		led_colors[led].R += f->dR; 
+		led_colors[led].G += f->dG; 
+		led_colors[led].B += f->dB; 
+		f->prescaler_counter = 0;
+		f->steps--; 
+	} else {
+		f->prescaler_counter++;
+	}
+	return;
+}
+
 void main ()
 {			
 	uchar duty_cycle,x; 
 	uchar cycles;
 	uchar i;
 	unsigned int j=0;
+	unsigned int factor=0; 
+	led_fade_t fade;
 	init_oscillator();
 	init_io_pins(); 
 
-// TODO: check to make sure that timer is stable before going on 
-	init_timer0();
 
+// TODO: check to make sure that timer is stable before going on 
+
+
+	fade.prescaler=30;
+	fade.prescaler_counter=0;
+	fade.dR=0;
+	fade.dG=2;
+	fade.dB=1;
+	fade.steps=4;
+	set_rgb(0,0,0,0);
+	init_timer0();
+	//TODO: why in the world does this have to be here for the code to work correctly? Something having to do with timer0 not being stable yet or something? 
+	while(++j%66);
+
+	while(fade.steps > 0)
+	{
+		update_fade(0, &fade); 
+	}
+	fade.dR=1;
+	fade.dG=-2;
+	fade.dB=-1; 
+	fade.prescaler=100;
+	fade.steps=6;
+	while(fade.steps > 0)
+	{
+		update_fade(0, &fade); 
+	}
+	while(1); 
+
+
+
+/*
 	while (1)
 	{
 	for (i=0; i<NUM_INTENSITY_LEVELS; i++)
 	{	
-		
-		set_rgb(0,i,i,0);
-		//set_rgb(4,i,NUM_INTENSITY_LEVELS-i-1,0);
-		set_rgb(4,NUM_INTENSITY_LEVELS-1,NUM_INTENSITY_LEVELS-i-1,2);
+		j=0;
+		set_rgb(0,i,0,NUM_INTENSITY_LEVELS-1);
+		set_rgb(1,NUM_INTENSITY_LEVELS-1,NUM_INTENSITY_LEVELS-i-1,2);
+		set_rgb(2,0,0,NUM_INTENSITY_LEVELS-i-1);
+		set_rgb(3,0,i,0);
+		set_rgb(4,i,i,NUM_INTENSITY_LEVELS-i-1);	
+		set_rgb(5,i,0,i);
+		set_rgb(6,NUM_INTENSITY_LEVELS-i-1,i,NUM_INTENSITY_LEVELS-i-1);	
 		set_rgb(7,i,0,NUM_INTENSITY_LEVELS-i-1);
 
-		while(j++%4096); 
+		while(j++%factor); 
+		
 	}
+	factor+=10;
 	}
 	while(1); 
+*/
+
 }

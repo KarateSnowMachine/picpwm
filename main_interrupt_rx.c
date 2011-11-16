@@ -39,8 +39,8 @@ typedef struct led_state
 
 typedef struct led_fade
 {
-	uchar prescaler;
-	uchar prescaler_counter;
+	unsigned int prescaler;
+	unsigned int prescaler_counter;
 	uchar steps;
 	char dR; 
 	char dG;
@@ -108,7 +108,40 @@ void refresh_pwm(uchar refresh_row)
 		}
 	}
 }
+led_fade_t fades[NUM_LEDS] = {0}; 
+void update_fade(uchar led)
+{
+	led_fade_t *f = &fades[led];
+	if (f->steps == 0)
+	{
+		return;
+	}
+	if (f->prescaler_counter++ == f->prescaler)	{
+		led_colors[led].R += f->dR; 
+		led_colors[led].G += f->dG; 
+		led_colors[led].B += f->dB; 
+		f->prescaler_counter = 0;
+		f->steps--; 
+	} else {
+		f->prescaler_counter++;
+	}
+	return;
+}
 
+
+
+update_all_fades() 
+{
+	uchar led;
+	for (led=0; led<NUM_LEDS; led++)
+	{
+		if (fades[led].steps > 0)
+		{
+			update_fade(led); 
+		}
+	}
+
+}
 void draw()
 {
 	uchar row_pattern = ~(1<<(refresh_row+1));
@@ -132,6 +165,7 @@ void draw()
 	if (refresh_row == 0)
 	{
 		pwm_cycle = (pwm_cycle +1) % NUM_INTENSITY_LEVELS;
+		update_all_fades();
 	}
 }
 
@@ -142,23 +176,33 @@ void set_rgb(uchar num, uchar r, uchar g, uchar b)
 	led_colors[num].B = b;
 }
 
-void update_fade(uchar led, led_fade_t *f)
+void set_fade(uchar num, uchar dR, uchar dG, uchar dB, uchar steps, unsigned int prescaler)
 {
-	if (f->steps == 0)
+	led_fade_t *f;
+	if (steps ==0)
 	{
 		return;
 	}
-	if (f->prescaler_counter++ == f->prescaler)	{
-		led_colors[led].R += f->dR; 
-		led_colors[led].G += f->dG; 
-		led_colors[led].B += f->dB; 
-		f->prescaler_counter = 0;
-		f->steps--; 
-	} else {
-		f->prescaler_counter++;
-	}
-	return;
+	f = &fades[num];
+	f->dR = dR;
+	f->dG = dG;
+	f->dB = dB;
+	f->steps = steps;
+	f->prescaler = prescaler;
+	f->prescaler_counter = 0;
 }
+
+uchar is_fading(uchar num)
+{
+	return (fades[num].steps > 0);
+}
+
+void set_fade_blocking(uchar num, uchar dR, uchar dG, uchar dB, uchar steps, unsigned int prescaler)
+{
+	set_fade(num, dR, dG, dB, steps, prescaler);
+	while (is_fading(num));
+}
+
 
 void main ()
 {			
@@ -167,7 +211,6 @@ void main ()
 	uchar i;
 	unsigned int j=0;
 	unsigned int factor=0; 
-	led_fade_t fade;
 	init_oscillator();
 	init_io_pins(); 
 
@@ -175,55 +218,79 @@ void main ()
 // TODO: check to make sure that timer is stable before going on 
 
 
-	fade.prescaler=30;
-	fade.prescaler_counter=0;
-	fade.dR=0;
-	fade.dG=2;
-	fade.dB=1;
-	fade.steps=4;
-	set_rgb(0,0,0,0);
+	
+	
 	init_timer0();
 	//TODO: why in the world does this have to be here for the code to work correctly? Something having to do with timer0 not being stable yet or something? 
-	while(++j%66);
 
-	while(fade.steps > 0)
+	while (1){
+	for (i=0;i<NUM_LEDS;i++)
 	{
-		update_fade(0, &fade); 
+		set_rgb(i,0,0,0);
 	}
-	fade.dR=1;
-	fade.dG=-2;
-	fade.dB=-1; 
-	fade.prescaler=100;
-	fade.steps=6;
-	while(fade.steps > 0)
+
+	// fade up red in sequence
+	for (i=0;i<NUM_LEDS;i++)
 	{
-		update_fade(0, &fade); 
+		set_fade_blocking(i,1,0,0, 8, 100);
 	}
-	while(1); 
-
-
-
-/*
-	while (1)
+	// fade up blue in reverse sequence
+	for (i=0;i<NUM_LEDS;i++)
 	{
-	for (i=0; i<NUM_INTENSITY_LEVELS; i++)
-	{	
-		j=0;
-		set_rgb(0,i,0,NUM_INTENSITY_LEVELS-1);
-		set_rgb(1,NUM_INTENSITY_LEVELS-1,NUM_INTENSITY_LEVELS-i-1,2);
-		set_rgb(2,0,0,NUM_INTENSITY_LEVELS-i-1);
-		set_rgb(3,0,i,0);
-		set_rgb(4,i,i,NUM_INTENSITY_LEVELS-i-1);	
-		set_rgb(5,i,0,i);
-		set_rgb(6,NUM_INTENSITY_LEVELS-i-1,i,NUM_INTENSITY_LEVELS-i-1);	
-		set_rgb(7,i,0,NUM_INTENSITY_LEVELS-i-1);
-
-		while(j++%factor); 
-		
+		set_fade_blocking(NUM_LEDS-i-1,0,0,1, 8, 100);
 	}
-	factor+=10;
+	// fade down R,B but fade up G slower
+	for (i=0;i<NUM_LEDS;i++)
+	{
+		set_fade_blocking(i,-1,1,-1, 8, 300);
 	}
-	while(1); 
-*/
+	for (i=0;i<NUM_LEDS;i+=2)
+	{
+		set_fade(i,1,-1,0, 8, 500);
+	}	
+	// just green on here
 
+	for (i=0;i<NUM_LEDS;i++)
+	{
+		if (i%2 ==0)
+			set_fade(i,1,-1,0, 8, 500);
+		else
+			set_fade(i,0,-1,1, 8, 500);
+	}	
+
+	// this is sort of like a barrier -- wait for everyone to finish or else things might get out of sync
+	for (i=0;i<NUM_LEDS;i++)
+	{
+		while(is_fading(i));
+	}	
+
+	
+	while (j=(j+1)%160);
+	for (i=0;i<NUM_LEDS;i++)
+	{
+		if (i%2 ==0)
+			set_fade(i,-1,1,1, 8, 500);
+		else
+			set_fade(i,1,0,-1, 8, 500);
+	}	
+	
+	for (i=0;i<NUM_LEDS;i++)
+	{
+		while(is_fading(i));
+	}	
+	while (j=(j+1)%160);
+	for (i=0;i<NUM_LEDS;i++)
+	{
+			set_fade_blocking(i,0,-1,0, 8, 20);
+	}	
+	for (i=0;i<NUM_LEDS;i++)
+	{
+			set_fade_blocking(i,-1,0,0, 8, 20);
+	}	
+	for (i=0;i<NUM_LEDS;i++)
+	{
+			set_fade_blocking(i,0,0,-1, 8, 20);
+	}	
+
+	}
 }

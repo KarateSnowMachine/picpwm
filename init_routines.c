@@ -1,4 +1,5 @@
-#include <p18f4550.h>
+#include <pic18f4550.h>
+
 void init_oscillator()
 {
 	// internal oscillator 
